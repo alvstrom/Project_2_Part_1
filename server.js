@@ -9,21 +9,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Test endpoint to generate JWT tokens
-app.post("/auth/login", (req, res) => {
-  const { username, userId } = req.body;
-
-  if (!username || !userId) {
-    return res.status(400).json({ error: "Username and userId required" });
-  }
-
-  const token = jwt.sign({ username, userId }, process.env.JWT_SECRET, {
-    expiresIn: "1h",
-  });
-
-  res.json({ token, username, userId });
-});
-
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.json({ status: "Server running!", timestamp: new Date().toISOString() });
@@ -40,19 +25,31 @@ const io = socketIo(server, {
 
 //JWT auth middleware for socket.io
 io.use((socket, next) => {
-  const token = socket.handshake.auth.token;
+  let token = socket.handshake.auth && socket.handshake.auth.token;
+
+  // Optional fallback to Authorization header (Bearer <token>)
+  if (!token) {
+    const authHeader = socket.handshake.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.slice(7).trim();
+    }
+  }
 
   if (!token) {
-    return next(new Error("Authentication error: No token provided"));
+    return next(new Error("AUTH_ERROR:No token"));
   }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    socket.userId = decoded.userId;
+    socket.userId = decoded.userId || decoded.id;
     socket.username = decoded.username;
-    next();
+    return next();
   } catch (err) {
-    next(new Error("Authentication error: Invalid token"));
+    if (err.name === "TokenExpiredError") {
+      return next(new Error("TOKEN_EXPIRED"));
+    }
+    return next(new Error("AUTH_ERROR:Invalid token"));
+    console.error("JWT Error:", err);
   }
 });
 
