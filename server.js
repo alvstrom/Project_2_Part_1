@@ -45,11 +45,11 @@ io.use((socket, next) => {
     socket.username = decoded.username;
     return next();
   } catch (err) {
+    console.error("JWT Error:", err);
     if (err.name === "TokenExpiredError") {
       return next(new Error("TOKEN_EXPIRED"));
     }
     return next(new Error("AUTH_ERROR:Invalid token"));
-    console.error("JWT Error:", err);
   }
 });
 
