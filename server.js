@@ -18,16 +18,16 @@ const server = http.createServer(app);
 
 const io = socketIo(server, {
   cors: {
-    origin: "*", //TODO: replace with valid URL later
+    origin: "*", // TODO: restrict to your frontend URLs in production
     methods: ["GET", "POST"],
   },
 });
 
-//JWT auth middleware for socket.io
+// JWT auth middleware for socket.io
 io.use((socket, next) => {
   let token = socket.handshake.auth && socket.handshake.auth.token;
 
-  // Optional fallback to Authorization header (Bearer <token>)
+  // Fallback to Authorization: Bearer <token>
   if (!token) {
     const authHeader = socket.handshake.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
@@ -54,10 +54,15 @@ io.use((socket, next) => {
 });
 
 io.on("connection", (socket) => {
-  console.log(`User ${socket.username} connected`);
+  // only same account sees messages
+  const room = `user:${socket.userId}`;
+  socket.join(room);
+  console.log(`User ${socket.username} joined ${room}`);
 
   socket.on("message", (data) => {
-    io.emit("message", {
+    if (!data || typeof data.text !== "string") return;
+
+    io.to(room).emit("message", {
       text: data.text,
       username: socket.username,
       timestamp: new Date().toISOString(),
